@@ -1,7 +1,6 @@
-/*
-Project: Mini Shell
+// Project: Mini Shell
 
-Stage 1: Basic Shell Loop
+/* Stage 1: Basic Shell Loop
 
 Requirements:
 1. Print "myshell> " when the shell starts.
@@ -16,6 +15,28 @@ Requirements:
 7. Repeat the process until the user enters "exit".
 */
 
+/* Stage 2: Built-in Commands
+
+Requirements:
+1. Implement the following built-in commands: exit, cd, pwd.
+2. Built-in commands must be executed by the shell process itself.
+3. Do not create a child process for bult-in commands.
+4. The cd command changes the shell's current working directory.
+5. The pwd command prints the shell's current working directory.
+6. The exit command terminates the shell.
+*/
+
+/* Stage 3: Error Handling
+
+Requirements:
+1. Handle invalid commands without terminating the shell.
+2. Handle missing arguments for the cd command.
+3. Handle failures from getcwd() and chdir().
+4. Handle fork() and waitpid() failures without terminating the shell.
+5. Terminate only the child process if execvp() fails.
+6. Handle EOF as normal shell termination.
+*/
+
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -27,10 +48,16 @@ int main(void){
     while(true){
         printf("myshell> ");
 
-        // get user input
+        // read user input
         char input[256];
         if(fgets(input, sizeof(input), stdin) == NULL){
-            return 1;
+            if(feof(stdin)){
+                printf("\nEnd of input\n");
+                break;
+            }
+
+            perror("fgets");
+            continue;
         }
         input[strcspn(input, "\n")] = '\0';
 
@@ -38,12 +65,6 @@ int main(void){
         if(input[0] == '\0'){
             printf("Empty Input\n");
             continue;
-        }
-
-        // if user input == "exit", terminate the program
-        if(strcmp(input, "exit") == 0){
-            printf("Terminate Program\n");
-            break;
         }
 
         // parse user input 
@@ -57,13 +78,42 @@ int main(void){
         }
         args[index] = NULL;
 
+        // handle built-in commands: exit, pwd, cd
+        // 1. handle the "exit" built-in command
+        if(strcmp(args[0], "exit") == 0){
+            printf("Terminate Program\n");
+            break;
+
+        // 2. handle the "pwd" built-in command
+        } else if(strcmp(args[0], "pwd") == 0) {
+            char cwd[256];
+            if(getcwd(cwd, sizeof(cwd)) != NULL){
+                printf("%s\n", cwd);
+            } else {
+                perror("getcwd");
+            }
+            continue;
+
+        // 3. handle the "cd" built-in command
+        } else if(strcmp(args[0], "cd") == 0){ 
+            if(args[1] == NULL){
+                printf("cd : missing argument\n");
+                continue;
+            }
+
+            if(chdir(args[1]) == -1){
+                perror("cd");
+            }
+            continue;
+        }
+
         // create a child process and handle exit status
         pid_t pid = fork();
         int status;
 
         if(pid < 0){
             perror("fork");
-            return 1;
+            continue;
         }
 
         if(pid == 0){
@@ -78,7 +128,7 @@ int main(void){
             // parent process
             if(waitpid(pid, &status, 0) == -1){
                 perror("waitpid");
-                return 1;
+                continue;
             }
             // display exit status 
             if(WIFEXITED(status)){
