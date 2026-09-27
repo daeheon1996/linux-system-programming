@@ -37,8 +37,25 @@ Requirements:
 6. Handle EOF as normal shell termination.
 */
 
+/* Stage 4: I/O Redirection
+
+Requirements:
+1. Support output redirection using ">".
+- Create the target file if it does not exist.
+- Truncate the file if it already exists.
+2. Sypport append redirection using ">>".
+- Create the target file if it does not exist.
+- Append output to the end of the existing file.
+3. Support input redirection using "<".
+4. Use dup2() to redirect standard input or standard output.
+5. Handle missing redirection targets and system call failures.
+6. Support only one redirection operator per command.
+*/
+
+
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -107,6 +124,54 @@ int main(void){
             continue;
         }
 
+        // redirection -> find '>', '>>' or '<'
+        char *redirection_file = NULL;
+        int redirection_type = 0;
+        bool redriection_error = false;
+        for(int i = 0; args[i] != NULL; i++){
+            if(strcmp(args[i], ">") == 0){
+                if(args[i+1] == NULL){
+                    printf("redirection target missing\n");
+                    redriection_error = true;
+                    break;
+                }
+
+                redirection_file = args[i+1];
+                args[i] = NULL;
+                redirection_type = 1;
+                break;
+
+            } else if (strcmp(args[i], ">>") == 0){
+                if(args[i+1] == NULL){
+                    printf("Redirection target missing\n");
+                    redriection_error = true;
+                    break;
+                }
+
+                redirection_file = args[i+1];
+                args[i] = NULL;
+                redirection_type = 2;
+                break;
+
+            } else if(strcmp(args[i], "<") == 0){
+                if(args[i+1] == NULL){
+                    printf("redirection target missing\n");
+                    redriection_error = true;
+                    break;
+                }
+
+                redirection_file = args[i+1];
+                args[i] = NULL;
+                redirection_type = 3;
+                break;
+            }
+        }
+
+        if(redriection_error){
+            continue;
+        }
+
+
         // create a child process and handle exit status
         pid_t pid = fork();
         int status;
@@ -118,6 +183,55 @@ int main(void){
 
         if(pid == 0){
             // child process
+
+            // case: use redirection
+            if(redirection_file != NULL){
+
+                if(redirection_type == 1){
+                    int fd = open(redirection_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                    if(fd == -1){
+                        perror("open");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if(dup2(fd, STDOUT_FILENO) == -1){
+                        perror("dup2");
+                        close(fd);
+                        exit(EXIT_FAILURE);
+                    }
+                    close(fd);
+
+                } else if(redirection_type == 2){
+                    int fd = open(redirection_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                    if(fd == -1){
+                        perror("open");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if(dup2(fd, STDOUT_FILENO) == -1){
+                        perror("dup2");
+                        close(fd);
+                        exit(EXIT_FAILURE);
+                    }
+                    close(fd);
+
+                } else if(redirection_type == 3){
+                    int fd = open(redirection_file, O_RDONLY);
+                    if(fd == -1){
+                        perror("open");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if(dup2(fd, STDIN_FILENO) == -1){
+                        perror("dup2");
+                        close(fd);
+                        exit(EXIT_FAILURE);
+                    }
+                    close(fd);
+                }
+            }
+
             execvp(args[0], args);
 
             // execvp() returns only if command execution fails
