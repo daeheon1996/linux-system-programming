@@ -52,6 +52,28 @@ Requirements:
 6. Support only one redirection operator per command.
 */
 
+/* Stage 5: Pipe
+
+Requirements:
+1. Support a single pipe between two commands
+ex) ls -l | grep ".c"
+2. Detect "|" from user input
+3. Split the input into two commands -> left, right
+4. Parse both commands into seperate argument arrays
+5. Create a pipe using pipe()
+6. Create two child processes -> first one executes left command, second one executes right command
+7. First child process
+- redirect stdout to the write end of the pipe
+- close unnecessary pipe file descriptors
+- execute the left command using execvp()
+8. Second child process
+- redirect stdin to the read end of the pipe
+- close unnecessary pipe file descriptors
+- execute the right command using execvp()
+9. Parent process
+- close both ends of the pipe
+- wait for both child processes
+*/
 
 #include <stdio.h>
 #include <unistd.h>
@@ -171,82 +193,169 @@ int main(void){
             continue;
         }
 
-
-        // create a child process and handle exit status
-        pid_t pid = fork();
-        int status;
-
-        if(pid < 0){
-            perror("fork");
-            continue;
+        // pipe
+        int pipe_index = -1, total_index = 0;
+        for(int i = 0; args[i] != NULL; i++){
+            if(strcmp(args[i], "|") == 0){
+                pipe_index = i;
+            }
+            total_index++;
         }
 
-        if(pid == 0){
-            // child process
+        // execute below codes only for pipe
+        char *left_args[16];
+        char *right_args[16];
 
-            // case: use redirection
-            if(redirection_file != NULL){
-
-                if(redirection_type == 1){
-                    int fd = open(redirection_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-                    if(fd == -1){
-                        perror("open");
-                        exit(EXIT_FAILURE);
-                    }
-
-                    if(dup2(fd, STDOUT_FILENO) == -1){
-                        perror("dup2");
-                        close(fd);
-                        exit(EXIT_FAILURE);
-                    }
-                    close(fd);
-
-                } else if(redirection_type == 2){
-                    int fd = open(redirection_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
-                    if(fd == -1){
-                        perror("open");
-                        exit(EXIT_FAILURE);
-                    }
-
-                    if(dup2(fd, STDOUT_FILENO) == -1){
-                        perror("dup2");
-                        close(fd);
-                        exit(EXIT_FAILURE);
-                    }
-                    close(fd);
-
-                } else if(redirection_type == 3){
-                    int fd = open(redirection_file, O_RDONLY);
-                    if(fd == -1){
-                        perror("open");
-                        exit(EXIT_FAILURE);
-                    }
-
-                    if(dup2(fd, STDIN_FILENO) == -1){
-                        perror("dup2");
-                        close(fd);
-                        exit(EXIT_FAILURE);
-                    }
-                    close(fd);
-                }
+        if(pipe_index != -1){
+            for(int i = 0; i < pipe_index; i++){
+                left_args[i] = args[i]; 
             }
+            left_args[pipe_index] = NULL;
 
-            execvp(args[0], args);
+            int right_index = 0;
+            for(int i = pipe_index + 1; i < total_index; i++){
+                right_args[right_index++] = args[i];
+            }
+            right_args[right_index] = NULL;
+        }
 
-            // execvp() returns only if command execution fails
-            perror("execvp");
-            exit(EXIT_FAILURE);
+        if(pipe_index == -1){
 
-        } else {
-            // parent process
-            if(waitpid(pid, &status, 0) == -1){
-                perror("waitpid");
+            // create a child process and handle exit status
+            pid_t pid = fork();
+            int status;
+
+            if(pid < 0){
+                perror("fork");
                 continue;
             }
-            // display exit status 
-            if(WIFEXITED(status)){
-                printf("Process exited with status %d\n", WEXITSTATUS(status));
+
+            if(pid == 0){
+                // child process
+
+                // case: use redirection
+                if(redirection_file != NULL){
+
+                    if(redirection_type == 1){
+                        int fd = open(redirection_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                        if(fd == -1){
+                            perror("open");
+                            exit(EXIT_FAILURE);
+                        }
+
+                        if(dup2(fd, STDOUT_FILENO) == -1){
+                            perror("dup2");
+                            close(fd);
+                            exit(EXIT_FAILURE);
+                        }
+                        close(fd);
+
+                    } else if(redirection_type == 2){
+                        int fd = open(redirection_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                        if(fd == -1){
+                            perror("open");
+                            exit(EXIT_FAILURE);
+                        }
+
+                        if(dup2(fd, STDOUT_FILENO) == -1){
+                            perror("dup2");
+                            close(fd);
+                            exit(EXIT_FAILURE);
+                        }
+                        close(fd);
+
+                    } else if(redirection_type == 3){
+                        int fd = open(redirection_file, O_RDONLY);
+                        if(fd == -1){
+                            perror("open");
+                            exit(EXIT_FAILURE);
+                        }
+
+                        if(dup2(fd, STDIN_FILENO) == -1){
+                            perror("dup2");
+                            close(fd);
+                            exit(EXIT_FAILURE);
+                        }
+                        close(fd);
+                    }
+                }
+
+                execvp(args[0], args);
+
+                // execvp() returns only if command execution fails
+                perror("execvp");
+                exit(EXIT_FAILURE);
+
+            } else {
+                // parent process
+                if(waitpid(pid, &status, 0) == -1){
+                    perror("waitpid");
+                    continue;
+                }
+                // display exit status 
+                if(WIFEXITED(status)){
+                    printf("Process exited with status %d\n", WEXITSTATUS(status));
+                }
+            }
+        } else {
+            int pipefd[2];
+            if(pipe(pipefd) == -1){
+                perror("pipe");
+                continue;
+            }
+
+            int pid1 = fork();
+            if(pid1 < 0){
+                perror("fork");
+                continue;
+
+            } else if(pid1 == 0){
+                close(pipefd[0]);
+                if(dup2(pipefd[1], STDOUT_FILENO) == -1){
+                    perror("dup2");
+                    exit(EXIT_FAILURE);
+                }
+                close(pipefd[1]);
+
+                execvp(left_args[0], left_args);
+
+                perror("execvp");
+                exit(EXIT_FAILURE);
+            }
+
+            int pid2 = fork();
+            if(pid2 < 0){
+                perror("fork");
+                continue;
+
+            } else if(pid2 == 0){
+                close(pipefd[1]);
+                if(dup2(pipefd[0], STDIN_FILENO) == -1){
+                    perror("dup2");
+                    exit(EXIT_FAILURE);
+                }
+                close(pipefd[0]);
+
+                execvp(right_args[0], right_args);
+
+                perror("execvp");
+                exit(EXIT_FAILURE);
+
+            } else {
+                // parent process
+                close(pipefd[0]);
+                close(pipefd[1]);
+
+                if(waitpid(pid1, NULL, 0) == -1){
+                    perror("waitpid");
+                    continue;
+                }
+                if(waitpid(pid2, NULL, 0) == -1){
+                    perror("waitpid");
+                    continue;
+                }
+
             }
         }
     }
