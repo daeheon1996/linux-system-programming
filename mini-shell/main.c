@@ -8,6 +8,11 @@
 #include "builtin.h"
 
 
+/* #define Directives */
+#define MAX_INPUT_SIZE 256
+#define MAX_ARGS 16
+
+
 /* Enum Definitions */
 typedef enum {
     INPUT_OK,
@@ -17,7 +22,7 @@ typedef enum {
 
 
 /* Function Definitions */
-// read and validate user input 
+// read_user_input() -> Read and validate user input.
 InputStatus read_user_input(char *input, size_t size){
 
     if(fgets(input, size, stdin) == NULL){
@@ -47,8 +52,8 @@ int main(void){
     while(true){
         printf("myshell> ");
 
-        // 1. handle user input
-        char input[256];
+        // 1. read and validate user input
+        char input[MAX_INPUT_SIZE];
         InputStatus input_status = read_user_input(input, sizeof(input));
 
         if(input_status == INPUT_RETRY){
@@ -57,8 +62,8 @@ int main(void){
             break;
         }
 
-        // 2. parse user input 
-        char *args[16];
+        // 2. parse command
+        char *args[MAX_ARGS];
         parse_command(args, input);
 
         // 3. handle built-in commands: exit, pwd, cd
@@ -82,16 +87,16 @@ int main(void){
 
         // 5. parse pipe: "|"
         int pipe_index = -1;
-        char *left_args[16], *right_args[16];
+        char *left_args[MAX_ARGS], *right_args[MAX_ARGS];
         parse_pipe(args, &pipe_index, left_args, right_args);
         
         
-        // 6. execute single command
+        // 6. execute single command (external)
         if(pipe_index == -1){
             execute_single_command(args, redirection_file, redirection_type);
         } 
         
-        // 7. execute pipeline -> two commands
+        // 7. execute pipeline (two commands)
         else {
             execute_pipeline(left_args, right_args);
         }

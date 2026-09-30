@@ -5,8 +5,12 @@
 #include <string.h>
 
 
+/* #define Directives */
+#define MAX_INPUT_SIZE 256
+
+
 /* Function Definitions */
-// handle built-in commands: pwd, cd, exit
+// handle_builtin() -> Handle built-in commands: pwd, cd, exit.
 BuiltinStatus handle_builtin(char **args){
     // 1. handle the "exit" built-in command
         if(strcmp(args[0], "exit") == 0){
@@ -15,7 +19,7 @@ BuiltinStatus handle_builtin(char **args){
 
     // 2. handle the "pwd" built-in command
     } else if(strcmp(args[0], "pwd") == 0) {
-        char cwd[256];
+        char cwd[MAX_INPUT_SIZE];
         if(getcwd(cwd, sizeof(cwd)) != NULL){
             printf("%s\n", cwd);
         } else {
@@ -36,7 +40,7 @@ BuiltinStatus handle_builtin(char **args){
         return BUILTIN_HANDLED;
     }
 
-    return BUILTIN_NOT_FOUND;
+    return BUILTIN_NOT_HANDLED;
 }
 
 
