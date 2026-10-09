@@ -78,35 +78,32 @@ void parse_redirection(char **args, char **redirection_file, int *redirection_ty
     }
 }
 
-// parse_pipe() -> Parse the pipe operator "|" and seperate commands
+// Parse "|" and split arguments into left and right commands.
 void parse_pipe(char **args, int *pipe_index, char **left_args, char **right_args){
-    int total_index = 0;
-
-    // Find the pipe position and count the total number of arguments.
+    // Find "|" and copy arguments before it.
     for(int i = 0; args[i] != NULL; i++){
         if(strcmp(args[i], "|") == 0){
             *pipe_index = i;
+            args[i] = NULL;
+            break;
         }
-        total_index++;
+        left_args[i] = args[i];
     }
 
-    if(*pipe_index != -1){
-
-        // Copy arguments before "|" to the left command.
-        for(int i = 0; i < *pipe_index; i++){
-            left_args[i] = args[i]; 
-        }
-        left_args[*pipe_index] = NULL;
-
-        int right_index = 0;
-        
-        // Copy arguments after "|" to the right command.
-        for(int i = *pipe_index + 1; i < total_index; i++){
-            right_args[right_index++] = args[i];
-        }
-        right_args[right_index] = NULL;
+    // No pipe found.
+    if(*pipe_index == -1){
+        return;
     }
+
+    // NULL-terminate the left command.
+    left_args[*pipe_index] = NULL;
+
+    // Copy arguments after "|" into the right command.
+    int right_index = 0;
+    for(int i = *pipe_index + 1; args[i] != NULL; i++){
+        right_args[right_index++] = args[i];
+    }
+    right_args[right_index] = NULL;
 }
-
 
 
