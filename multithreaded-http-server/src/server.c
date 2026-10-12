@@ -1,4 +1,3 @@
-
 /* #include directives */
 #include "server.h"
 #include "http.h"
@@ -8,6 +7,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+
+/* #define directives */
+#define MAX_REQUEST_SIZE 4096
 
 /* Function Definitions */
 
@@ -63,16 +65,35 @@ int run_server(void){
         printf("Client connected!\n");
 
         // Receive the client's HTTP request (single recv for now).
-        char buf[4096];
-        ssize_t byte_received = recv(conn_fd, buf, sizeof(buf) - 1, 0);
+        char request_buf[MAX_REQUEST_SIZE];
+        ssize_t byte_received = receive_http_request(conn_fd, request_buf, MAX_REQUEST_SIZE);
 
         if(byte_received > 0){
             // Null-terminate the received data for printing.
-            buf[byte_received] = '\0';
-            printf("Received = %s\n", buf);
+            request_buf[byte_received] = '\0';
+            printf("Received = %s\n", request_buf);
+
+            // parse client's http request
+            char method[16];
+            char path[256];
+            char version[16];
+            
+            if(parse_http_request(request_buf, method, path, version) == -1){
+                if(send_http_response(conn_fd, 400) == -1){
+                    fprintf(stderr, "HTTP 400 response failed\n");
+                }
+                close(conn_fd);
+                continue;
+
+            } else {
+                printf("Method: %s\n", method);
+                printf("Path: %s\n", path);
+                printf("Version: %s\n", version);
+            }
 
             // Send an HTTP response to the client.
-            if(send_http_response(conn_fd) == -1){
+            int status_code = get_http_status(method, path);
+            if(send_http_response(conn_fd, status_code) == -1){
                 fprintf(stderr, "HTTP response failed\n");
                 close(conn_fd);
                 continue;
