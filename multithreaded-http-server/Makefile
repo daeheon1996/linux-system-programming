@@ -9,7 +9,7 @@ OBJS = $(SRCS:.c=.o)
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $(TARGET) -pthread
+	$(CC) $(OBJS) -o $(TARGET) -pthread $(LDFLAGS)
 
 src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@

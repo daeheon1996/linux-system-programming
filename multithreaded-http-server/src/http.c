@@ -1,11 +1,13 @@
-/* #include directives */
+/* Include Directives */
 #include "http.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <errno.h>
 
 
 /* Function Definitions */
+
 // get_status_text() -> Return the HTTP reason phrase for the given status code.
 static const char *get_status_text(int status_code){
     char *status_text = NULL;
@@ -30,7 +32,13 @@ static int send_all(int fd, const char *buf, size_t len){
 
     while(byte_handled < len){
         ssize_t byte_sent = send(fd, buf + byte_handled, len - byte_handled, MSG_NOSIGNAL);
-        if(byte_sent <= 0){
+        if(byte_sent == -1){
+            if(errno == EINTR){
+                continue;
+            }
+            return -1;
+
+        } else if (byte_sent == 0){
             return -1;
         }
 
@@ -103,7 +111,7 @@ int parse_http_request(const char *request_buf, char *method, char *path, char *
     return 0;
 }
 
-// get_http_status() -> get http status code by considering method and path
+// get_http_status() -> get http status code by considering method and path.
 int get_http_status(const char *method, const char *path){
     int status_code;
     if(strcmp(method, "GET") == 0 && strcmp(path, "/") == 0){
@@ -141,10 +149,14 @@ ssize_t receive_http_request(int conn_fd, char *request_buf, size_t buf_size){
             return 0;
         } else {
             // if (byte_received == -1)
+            if(errno == EINTR){
+                continue;
+            }
             return -1;
         }
     }
     
-    // 4. exceeds max buf size?
-    return -1;
+    // 4. if requested headers exceeded max buf size
+    return -2;
 }
+

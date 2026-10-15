@@ -11,9 +11,12 @@
 #include <pthread.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/time.h>
+
 
 /* Define Directives */
 #define MAX_REQUEST_SIZE 4096
+
 
 /* Global Variables */
 static int active_clients = 0;
@@ -36,6 +39,16 @@ static void *handle_client(void *arg){
     int conn_fd = *(int *)arg;
     free(arg);
 
+    // set timeout to prevent from waiting for receiving data continously.
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    int setsockopt_ret = setsockopt(conn_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    if(setsockopt_ret == -1){
+        perror("setsockopt");
+        goto cleanup;
+    }
+
     // Receive the client's HTTP request headers.
     char request_buf[MAX_REQUEST_SIZE];
     ssize_t byte_received = receive_http_request(conn_fd, request_buf, MAX_REQUEST_SIZE);
@@ -49,34 +62,39 @@ static void *handle_client(void *arg){
         char version[16];
 
         if(parse_http_request(request_buf, method, path, version) == -1){
+            fprintf(stderr, "[ERROR] fd = %d, Invalid HTTP request\n", conn_fd);
+
             if(send_http_response(conn_fd, 400) == -1){
-                fprintf(stderr, "HTTP 400 response failed\n");
+                fprintf(stderr, "[ERROR] fd = %d, HTTP 400 response failed\n", conn_fd);
+            } else {
+                fprintf(stdout, "[RESPONSE] fd = %d, status = 400\n", conn_fd);
             }
 
             goto cleanup;
         }
 
-        printf("Method: %s\n", method);
-        printf("Path: %s\n", path);
-        printf("Version: %s\n", version);
+        // display requested method, path, version
+        fprintf(stdout, "[REQUESTED] fd = %d, %s %s %s\n", conn_fd, method, path, version);
 
         // Determine the response status based on the request.
         int status_code = get_http_status(method, path);
 
         if(send_http_response(conn_fd, status_code) == -1){
-            fprintf(stderr, "HTTP response failed\n");
+            fprintf(stderr, "[ERROR] fd = %d, HTTP response failed\n", conn_fd);
+        } else {
+            fprintf(stdout, "[RESPONSE] fd = %d, status = %d\n", conn_fd, status_code);
         }
 
-    } else if(byte_received == 0){
-        printf("Connection Closed\n");
-
-    } else {
-        perror("recv");
+    } else if(byte_received == -1){
+        fprintf(stderr, "[ERROR] fd = %d, HTTP request receive failed\n", conn_fd);
+    }  else if(byte_received == -2){
+        fprintf(stderr, "[ERROR] fd = %d, HTTP request too large\n", conn_fd);
     }
 
 cleanup:
     // Release the client connection and update the active worker count.
     close(conn_fd);
+    fprintf(stdout, "[INFO] Client Disconnected: (fd=%d)\n", conn_fd);
 
     pthread_mutex_lock(&clients_mutex);
     active_clients--;
@@ -168,7 +186,7 @@ int run_server(void){
             break;
         }
 
-        printf("[INFO] Client connected: (fd = %d)\n", conn_fd);
+        fprintf(stdout, "[INFO] Client connected: (fd = %d)\n", conn_fd);
 
         // Prepare signals to block during worker thread creation.
         sigset_t sigset;
