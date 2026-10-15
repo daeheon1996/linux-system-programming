@@ -19,14 +19,14 @@ The main thread accepts connections and creates worker threads. Each worker rece
 
 ## 2. Features
 
-### TCP and Multithreading
+### 2.1) TCP and Multithreading
 - TCP server using `socket()`, `bind()`, `listen()`, and `accept()`
 - One worker thread per client using `pthread_create()`
 - Detached worker threads
 - Mutex-protected active client counter
 - Condition variable to wait for workers during shutdown
 
-### HTTP Request and Response
+### 2.2) HTTP Request and Response
 - Receive and parse HTTP request headers
 - Handle partial sends
 - Limit request buffer size to 4096 bytes
@@ -39,7 +39,7 @@ The main thread accepts connections and creates worker threads. Each worker rece
 | 404 Not Found | Unsupported path |
 | 405 Method Not Allowed | Non-GET request to `/` |
 
-### Shutdown and Logging
+### 2.3) Shutdown and Logging
 - Handle SIGINT and SIGTERM using `sigaction()`
 - Block shutdown signals during worker creation
 - Wait for active workers before exiting
@@ -114,14 +114,14 @@ make clean
 
 ## 5. Testing
 
-### HTTP and Concurrency
+### 5.1) HTTP and Concurrency
 
 - Tested HTTP 200, 400, 404, and 405 responses
 - Tested multiple concurrent connections
 - Verified that a slow client does not block other clients
 - Tested receive timeout and graceful shutdown
 
-### Compiler and Sanitizers
+### 5.2) Compiler and Sanitizers
 
 - GCC: `-Wall -Wextra -Werror`
 - AddressSanitizer (ASan)
@@ -129,7 +129,7 @@ make clean
 
 No sanitizer errors were reported in the executed tests.
 
-### Wireshark
+### 5.3) Wireshark
 
 Captured TCP and HTTP traffic on the loopback interface.
 
