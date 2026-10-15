@@ -13,17 +13,14 @@
 #include <errno.h>
 #include <sys/time.h>
 
-
 /* Define Directives */
 #define MAX_REQUEST_SIZE 4096
-
 
 /* Global Variables */
 static int active_clients = 0;
 static pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 static volatile sig_atomic_t stop_requested = 0;
 static pthread_cond_t clients_cond = PTHREAD_COND_INITIALIZER;
-
 
 /* Function Definitions */
 
@@ -35,21 +32,22 @@ static void handle_signal(int signo){
 
 // handle_client() -> Process a single client's HTTP request in a worker thread.
 static void *handle_client(void *arg){
-    // Take ownership of the client FD and release the thread argument.
+    // Retrieve the client FD and release the thread argument.
     int conn_fd = *(int *)arg;
     free(arg);
 
-    // set timeout to prevent from waiting for receiving data continously.
+    // Set a receive timeout to prevent indefinite blocking.
     struct timeval timeout;
     timeout.tv_sec = 5;
     timeout.tv_usec = 0;
+
     int setsockopt_ret = setsockopt(conn_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     if(setsockopt_ret == -1){
         perror("setsockopt");
         goto cleanup;
     }
 
-    // Receive the client's HTTP request headers.
+    // Receive the HTTP request headers.
     char request_buf[MAX_REQUEST_SIZE];
     ssize_t byte_received = receive_http_request(conn_fd, request_buf, MAX_REQUEST_SIZE);
 
@@ -73,10 +71,10 @@ static void *handle_client(void *arg){
             goto cleanup;
         }
 
-        // display requested method, path, version
-        fprintf(stdout, "[REQUESTED] fd = %d, %s %s %s\n", conn_fd, method, path, version);
+        // Log the parsed HTTP request.
+        fprintf(stdout, "[REQUEST] fd = %d, %s %s %s\n", conn_fd, method, path, version);
 
-        // Determine the response status based on the request.
+        // Determine and send the HTTP response.
         int status_code = get_http_status(method, path);
 
         if(send_http_response(conn_fd, status_code) == -1){
@@ -87,20 +85,20 @@ static void *handle_client(void *arg){
 
     } else if(byte_received == -1){
         fprintf(stderr, "[ERROR] fd = %d, HTTP request receive failed\n", conn_fd);
-    }  else if(byte_received == -2){
+    } else if(byte_received == -2){
         fprintf(stderr, "[ERROR] fd = %d, HTTP request too large\n", conn_fd);
     }
 
 cleanup:
-    // Release the client connection and update the active worker count.
+    // Close the client connection.
     close(conn_fd);
-    fprintf(stdout, "[INFO] Client Disconnected: (fd=%d)\n", conn_fd);
+    fprintf(stdout, "[INFO] Client disconnected: (fd = %d)\n", conn_fd);
 
+    // Update the active client count and notify the main thread.
     pthread_mutex_lock(&clients_mutex);
     active_clients--;
-    printf("[INFO] Active Clients = %d\n", active_clients);
+    fprintf(stdout, "[INFO] Active clients = %d\n", active_clients);
 
-    // Notify the main thread that a worker has finished its job.
     pthread_cond_signal(&clients_cond);
     pthread_mutex_unlock(&clients_mutex);
 
@@ -131,19 +129,20 @@ int run_server(void){
         return 1;
     }
 
-    // Create and configure the listening socket.
+    // Create the listening socket.
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(listen_fd == -1){
         perror("socket");
         return 1;
     }
 
+    // Configure the server address.
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(8080);
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    // Allow immediate reuse of the server address after restart.
+    // Allow address reuse after restarting the server.
     int opt = 1;
     if(setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1){
         perror("setsockopt");
@@ -170,7 +169,6 @@ int run_server(void){
         int conn_fd = accept(listen_fd, NULL, NULL);
 
         if(conn_fd == -1){
-            // Retry if accept() was interrupted by a signal.
             if(errno == EINTR){
                 continue;
             }
@@ -188,13 +186,13 @@ int run_server(void){
 
         fprintf(stdout, "[INFO] Client connected: (fd = %d)\n", conn_fd);
 
-        // Prepare signals to block during worker thread creation.
+        // Prepare shutdown signals to block during worker creation.
         sigset_t sigset;
         sigemptyset(&sigset);
         sigaddset(&sigset, SIGINT);
         sigaddset(&sigset, SIGTERM);
 
-        // Allocate a separate FD argument for the new worker.
+        // Allocate a separate FD argument for the worker.
         int *client_fd = malloc(sizeof(int));
         if(client_fd == NULL){
             perror("malloc");
@@ -205,13 +203,13 @@ int run_server(void){
 
         *client_fd = conn_fd;
 
-        // Count the worker before creation to prevent shutdown races.
+        // Increment the worker count before thread creation.
         pthread_mutex_lock(&clients_mutex);
         active_clients++;
-        printf("[INFO] Active clients = %d\n", active_clients);
+        fprintf(stdout, "[INFO] Active clients = %d\n", active_clients);
         pthread_mutex_unlock(&clients_mutex);
 
-        // Block shutdown signals so the new worker inherits the blocked mask.
+        // Block shutdown signals so the worker inherits the blocked mask.
         sigset_t oldset;
         int pthread_sigblock_ret = pthread_sigmask(SIG_BLOCK, &sigset, &oldset);
 
@@ -238,7 +236,7 @@ int run_server(void){
             exit_status = 1;
         }
 
-        // Roll back the worker count and release resources if creation fails.
+        // Release allocated resources if thread creation fails.
         if(pthread_create_ret != 0){
             fprintf(stderr, "pthread_create: %s\n", strerror(pthread_create_ret));
 
@@ -252,7 +250,7 @@ int run_server(void){
             break;
         }
 
-        // Detach the worker for automatic thread resource reclamation.
+        // Detach the worker to reclaim thread resources automatically.
         int detach_ret = pthread_detach(tid);
 
         if(detach_ret != 0){
@@ -268,18 +266,18 @@ int run_server(void){
             break;
         }
 
-        // Stop accepting clients if signal mask restoration failed.
+        // Stop accepting connections if signal mask restoration failed.
         if(exit_status != 0){
             break;
         }
     }
 
-    printf("[INFO] server shutdown started\n");
+    fprintf(stdout, "[INFO] Server shutdown started\n");
 
-    // Stop accepting new connections.
+    // Close the listening socket.
     close(listen_fd);
 
-    // Wait until all active workers have completed their cleanup.
+    // Wait for all active workers to finish.
     pthread_mutex_lock(&clients_mutex);
 
     while(active_clients > 0){
@@ -288,7 +286,7 @@ int run_server(void){
 
     pthread_mutex_unlock(&clients_mutex);
 
-    printf("[INFO] server shutdown completed\n");
+    fprintf(stdout, "[INFO] Server shutdown completed\n");
 
     return exit_status;
 }

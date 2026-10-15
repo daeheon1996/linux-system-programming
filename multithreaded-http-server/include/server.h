@@ -1,7 +1,7 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-/* function prototypes */
+/* Function Prototypes */
 int run_server(void);
 
 #endif
