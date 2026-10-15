@@ -1,17 +1,21 @@
-myshell: main.o parser.o executor.o builtin.o
-	gcc main.o parser.o executor.o builtin.o -o miniShell
 
-main.o: main.c
-	gcc -Wall -Wextra -c main.c
+CC = gcc
+CFLAGS = -Wall -Wextra -Iinclude
 
-parser.o: parser.c parser.h
-	gcc -Wall -Wextra -c parser.c 
+TARGET = miniShell
 
-executor.o: executor.c executor.h
-	gcc -Wall -Wextra -c executor.c
+SRCS = src/main.c src/parser.c src/executor.c src/builtin.c
+OBJS = $(SRCS:.c=.o)
 
-builtin.o: builtin.c builtin.h
-	gcc -Wall -Wextra -c builtin.c
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) $(OBJS) -o $(TARGET)
+
+src/%.o: src/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f main.o parser.o executor.o builtin.o miniSell
+	rm -f $(OBJS) $(TARGET)
+
+.PHONY: all clean
