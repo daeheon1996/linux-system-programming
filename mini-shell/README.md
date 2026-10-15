@@ -1,9 +1,9 @@
-## Overview
+## 1. Overview
 
 Mini Shell is a simple shell program implemented in C.
 This project was built to practice core Linux system programming concepts such as process creation, command execution, I/O redirection, and pipes.
 
-## Features
+## 2. Features
 
 - Execute external commands
 - Built-in commands: `cd`, `pwd`, `exit`
@@ -11,7 +11,7 @@ This project was built to practice core Linux system programming concepts such a
 - Single pipeline: `|`
 - Error handling for system call failures
 
-## Architecture
+## 3. Architecture
 
 ```text
 User Input
@@ -39,9 +39,9 @@ Redirection / Pipe Check
        execvp()
 ```
 
-## Core Implementation
+## 4. Core Implementation
 
-### 1. Process Execution
+### 4.1) Process Execution
 
 External commands are executed in a child process created with `fork()`.
 The parent shell waits for the child process to finish using `waitpid()`.
@@ -56,7 +56,7 @@ fork()
 
 `execvp()` replaces the child process image with the requested program while the parent shell remains running.
 
-### 2. I/O Redirection
+### 4.2) I/O Redirection
 
 The shell supports input (`<`), output (`>`), and append (`>>`) redirection.
 
@@ -80,7 +80,7 @@ echo hello > output.txt
 echo hello >> output.txt
 ```
 
-### 3. Pipe
+### 4.3) Pipe
 
 The shell supports a single pipeline connecting two commands.
 
@@ -114,7 +114,7 @@ execvp()
 
 `dup2()` connects the first command's standard output to the pipe's write end and the second command's standard input to the pipe's read end. Unused pipe file descriptors are closed in both the parent and child processes.
 
-## Error Handling
+## 5. Error Handling
 
 The shell handles errors from major system calls and reports failures using `perror()`.
 
@@ -129,7 +129,7 @@ The shell handles errors from major system calls and reports failures using `per
 
 When possible, errors are reported without terminating the main shell process, allowing the user to continue entering commands.
 
-## Build & Run
+## 6. Build
 
 Build the project using `make`:
 
@@ -149,16 +149,16 @@ Clean generated object files and executable:
 make clean
 ```
 
-## Usage
+## 7. Usage
 
-### External Commands
+### 7.1) External Commands
 
 ```bash
 myshell> ls -l
 myshell> echo hello
 ```
 
-### Built-in Commands
+### 7.2) Built-in Commands
 
 ```bash
 myshell> pwd
@@ -166,7 +166,7 @@ myshell> cd /tmp
 myshell> exit
 ```
 
-### I/O Redirection
+### 7.3) I/O Redirection
 
 ```bash
 myshell> echo hello > output.txt
@@ -174,13 +174,13 @@ myshell> echo world >> output.txt
 myshell> cat < input.txt
 ```
 
-### Pipe
+### 7.4) Pipe
 
 ```bash
 myshell> ls -l | grep .c
 ```
 
-## Limitations
+## 8. Limitations
 
 - Supports only a single pipeline between two commands
 - Does not support background execution (`&`)
